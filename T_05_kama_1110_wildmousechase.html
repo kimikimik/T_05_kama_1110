@@ -75,6 +75,18 @@
       margin-top: 6px;
     }
 
+    #message.game-over {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
+      font-size: clamp(2.5rem, 8vw, 5rem); /* clamp(最小値, 基準にする値, 最大値) */
+      font-weight: 800;
+      color: rgb(171, 228, 40);
+      white-space: nowrap; /* 文字を途中で改行させない */
+}   
+
     /* position: absolute;で、画面全体が捕獲フィールドという新しい概念（ルール）を設定する */
     #field {
       width: 100%;
@@ -169,7 +181,8 @@
     <div id="message">クリックでねずみをつかまえて！</div>
   </div>
 
-  <!-- 画面全域のタップ用フィールド -->
+  <!-- ネズミをフィールド上で動かして、フィールドをクリックしたら空振り」という構造 -->
+  <!-- 空間をクリック＝missClick() 。ネズミをクリック＝catchMouse() が呼ばれる。catchMouse() 内で伝播を止めてmissClick() は呼ばれない。 -->
   <div id="field" onclick="missClick(event)">
     <div id="mouse" onclick="catchMouse(event)">🐭</div>
   </div>
@@ -179,19 +192,29 @@
   </div>
 
   <script>
+    // 値が変わるからlet 
     let score = 0;
     let isPlaying = false;
     let moveTimer = null;
+    // ゲームがはじまっていないときはスコアは０、タイマーはまだ動いてない
+    let missCount = 0;
+    const maxMisses = 10;
+    // ミスのカウントは0、ミスは最大で10回まで
 
     const mouseElement = document.getElementById("mouse");
     const scoreElement = document.getElementById("score");
     const messageElement = document.getElementById("message");
-
+    const startButtonElement = document.querySelector(".controls button");
 
     function startGame() {
       score = 0;
+      missCount = 0;
       isPlaying = true;
+      startButtonElement.textContent = "CHASING";
       scoreElement.textContent = score;
+
+      messageElement.classList.remove("game-over");
+        // ゲームオーバー時に追加された「game-over」クラスを削除して、文字CSSを元に戻す
       messageElement.textContent = "つかまえられるかな？";
 
       mouseElement.style.display = "flex";
@@ -199,13 +222,13 @@
       mouseElement.textContent = "🐭";
 
       if (moveTimer) clearInterval(moveTimer);
-    //   clearInterval(...) は「動いている定期タイマーをストップして消去する」命令
+    //   if (moveTimer) → タイマーに値がある？ clearInterval(moveTimer) → あるなら、そのタイマーを止める
 
       jumpMouse();
       // 0.8秒ごとに画面の別の場所へ跳ぶ
       moveTimer = setInterval(jumpMouse, 800);
     //   setInterval は「指定した時間ごとに、指定した関数を永遠に繰り返す」というメトロノーム機能
-    // 800 はミリ秒単位（1000ミリ秒 ＝ 1秒なので、0.8秒ごと）
+    //  800 はミリ秒単位（1000ミリ秒 ＝ 1秒なので、0.8秒ごと）
     // 「0.8秒ごとに jumpMouse（ワープ関数）を自動で呼び出し続けなさい」というタイマーを起動し、そのタイマーの管理番号を moveTimer に預けている
     }
 
@@ -227,15 +250,15 @@
 
     // ネズミをクリックしたとき
     function catchMouse(event) {
-      // 親要素（#field）のクリック判定が重なって動かないように防ぐ呪文
+      // 親要素（#field）のクリック判定が重なって動かないように防ぐ
       event.stopPropagation();
-        //  「イベントの伝播を止める」命令、床側に伝えない
+        //  「イベントの伝播を止める」、床側に伝えない
 
       // 条件分岐1: ゲーム中かどうか？
       if (isPlaying) {
         score = score + 10;
         scoreElement.textContent = score;
-        messageElement.textContent = "捕まえた！ (+10)";
+        messageElement.textContent = "つかまえた！ (+10)";
         
         mouseElement.textContent = "💨"; // 捕獲エフェクト
 
@@ -243,23 +266,40 @@
         setTimeout(() => {
           mouseElement.textContent = "🐭";
           jumpMouse();
-        }, 150); // 0.15秒だけ『💨』の姿で余韻を残して、そのあと元の🐭に戻してワープさせるタイマー
-        // もしこの setTimeout がないとどうなるかというと：
-        // ネズミを叩いた瞬間に「💨」にする
-        // でも、その0.0001秒後にすぐネズミに戻してワープさせてしまう
-        // 結果、人間の目には「💨」が一瞬たりとも見えず、ただ🐭が消えたようにしか見えない
+        }, 150); // 0.15秒だけ『💨』、そのあと元の🐭に戻してワープさせるタイマーをセット
       }
     }
+
+    // ゲームオーバーを定義する
+    function endGame() {
+      isPlaying = false;
+      clearInterval(moveTimer);
+      moveTimer = null;
+      mouseElement.style.display = "none";
+      messageElement.textContent = "GAME OVER";
+      messageElement.classList.add("game-over");
+      // 「game-over」というクラスを追加して、CSSで文字色を変える
+      startButtonElement.textContent = "PLAY AGAIN";
+}
 
     // ネズミ以外の空っぽの背景をクリックしてしまったとき
     function missClick(event) {
       // 条件分岐2: ゲーム中に空振りしたかどうか？
       if (isPlaying) {
-        messageElement.textContent = "逃げられちゃったよ！";
+        missCount++; // ＝missCount = missCount + 1;
+
+        if (missCount >= maxMisses) {
+          endGame();
+
+        } else {
+          messageElement.textContent = `逃げられちゃったよ！ 残り ${maxMisses - missCount} 回`;
+        }
+
       } else {
-        messageElement.textContent = "START CHASEを押してね";
+        messageElement.textContent = "START CHASEをクリック";
       }
     }
+
   </script>
 
 </body>
