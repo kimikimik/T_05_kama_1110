@@ -6,7 +6,7 @@ WILD MOUSE CHASE
 ～ねずみを追いかけるクリックミニゲーム～
 
 ## ③アプリのデプロイURL
-デプロイしてません
+https://kimikimik.github.io/T_05_kama_1110/T_05_kama_1110_wildmousechase.html
 
 ## ④アプリのログイン用IDまたはPassword（ある場合）
 - ID: なし
