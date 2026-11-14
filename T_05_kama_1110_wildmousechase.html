@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Catch the Mouse</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      /* スクロールせず画面いっぱい使いたいときの指定 */
+      overflow: hidden;
+      /* 画面からはみ出てもスクロールバーを出さない＝揺らさない */
+      background: radial-gradient(circle at center, #252b30 0%, #121517 100%);
+      /* 中央から外側へ、円形に広がるグラデーション背景 */
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #e2e8f0;
+      user-select: none;
+      /* 「青い選択ハイライト」を禁止 */
+      position: relative;
+      /* 基準の原点＝左上、予期せぬ位置ズレ事故を防ぐための鉄則・お作法 */
+    }
+
+    .hud {
+        /* Heads-Up Display＝情報パネル */
+      position: absolute;
+      top: 32px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      pointer-events: none; /* パネルを無視＝パネル下のねずみをクリックできる */
+      z-index: 10;
+    }
+
+    .title {
+      font-size: 0.9rem;
+      /* rem＝ユーザーの設定サイズを基準にリサイズする */
+      letter-spacing: 0.3em;
+      /* letter-spacingの場合は「自分自身の文字サイズ」 を基準にする */
+      text-transform: uppercase;
+      /* アルファベットの小文字を、すべて「大文字」に自動変換して表示する */
+      /* 音声読み上げへの配慮：普通の綴りで書いておき、CSSで見た目だけ大文字にするのが、Web標準としても綺麗な作法 */
+      /* text-transform: lowercase; → すべて小文字にする（lowercases） */
+      /* text-transform: capitalize; → 単語の頭文字だけを大文字にする */
+      color: #81a1c1;
+      font-weight: 700;
+      /* 太さの段階　100が最も細く、900が最も太いマッチョな状態、700＝Bold*/
+    }
+
+    .score-display {
+      font-size: clamp(3.5rem, 8vw, 5.5rem);
+      /* clamp(min, preferred, max) → 最小値、推奨値、最大値の3つを指定して、画面サイズに応じて自動でリサイズする */
+      /* 最小値（下限）: 3.5rem（約 56px）
+        「スマホなど画面がどれだけ狭くなっても、これより小さくしないで！」という限界サイズ。
+        理想の値（可変）: 8vw（画面横幅の 8%）
+        「ふだんは画面の横幅（vw）に合わせて、画面が広がるほど文字も大きくしてね！」というリクエスト。
+        最大値（上限）: 5.5rem（約 88px）
+        「大画面モニターでブラウザを広げても、これ以上は巨大化させないで！」という限界サイズ。 */
+      font-weight: 800;
+      line-height: 1.1;
+      color: #eceff4;
+      font-variant-numeric: tabular-nums;
+      /* 数字の横幅をすべて「同じ幅（等幅）」に揃えて、桁が増減しても数字がガタガタ左右に揺れないようにする */
+    }
+
+    #message {
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      color: #88c0d0;
+      margin-top: 6px;
+    }
+
+    /* position: absolute;で、画面全体が捕獲フィールドという新しい概念（ルール）を設定する */
+    #field {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      /* 自由行動モード：普段の並び順ルールから完全に離脱して、座標（ピン留め）で好きな位置に置くモード */
+      top: 0;
+      left: 0; /* 左上に固定 */
+      cursor: crosshair; /* マウスポインターを照準カーソルに変える */
+    }
+
+    /* CSSで画面いっぱいにレイヤーを敷くときの「黄金の4点セット」
+        #field {
+        position: absolute;  1. 浮き上がって自由な膜になる 
+        top: 0;              2. てっぺんの隙間ゼロ 
+        left: 0;             3. 左端の隙間ゼロ（これで左上にピン留め完了） 
+        width: 100%;         4. そこから右端まで100%広げる
+        height: 100%;        5. そこから下端まで100%広げる  
+    } */
+
+    /* 画面を駆け回るネズミ */
+    #mouse {
+      position: absolute;
+      font-size: 44px;
+      width: 60px;
+      height: 60px;
+
+      display: flex;            /* 1. 整列モードを起動！ */
+      align-items: center;      /* 2. 上下の真ん中に寄せる */
+      justify-content: center;  /* 3. 左右の真ん中に寄せる */
+        /* ど真ん中に配置する3点セット */
+
+      cursor: pointer;
+      display: none; /* 非表示　STARTしたらこの指定が解除されてねずみが現れる */
+      /* CSSは下にあるものが上書きで勝つルール */
+      transition: transform 0.1s ease;
+      /* 0.1秒かけてなめらかにアニメーションさせるための緩急（イージング）の設定
+      　active＝押した瞬間のみの設定だから、行きも帰りも対象となるようにこっちで設定 */
+    }
+
+    #mouse:active {
+      transform: scale(0.85);
+    }
+    /* 上にカーソルを乗せたとき（:hover）：乗っかりモード
+       カチッと押し込んでいる間（:active）：押し込みモード */
+
+
+    /* スタートボタン */
+    .controls {
+      position: absolute;
+      bottom: 40px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      z-index: 10;
+      /* 画面の要素は「HTMLで後から書かれたものが上に重なる」のが自然なルール、
+        背景は１、余裕を持った数字をつけておく慣習があるため、ここでは10を指定 */
+    }
+
+    button {
+      background: #88c0d0;
+      color: #1a202c;
+      border: none; /* 縁線なし */
+      padding: 14px 40px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      border-radius: 999px;
+      /* ボタンの左右の端っこを、完璧な半円（カプセル型・ピル型）に丸める 999px＝限界の半円*/
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(136, 192, 208, 0.3);
+        /* 0（横のズレ：X軸）左右にはずらしません。光が真上から当たっている設定です。
+        8px（縦のズレ：Y軸）影を8pxだけ下にストンと落とします。ボタンが画面から手前に少し浮き上がっているような立体感が生まれます。
+        24px（ぼかしの半径：ブラー）影の輪郭を24px分ふんわり大きくボカします。数値が大きいほど、クッキリした影ではなく、空気中にフワッと溶け込むような柔らかい光や影になります。
+        rgba(136, 192, 208, 0.3)（影の色と透明度）
+        136, 192, 208 は、北欧風の淡いアイスブルー（水色）。末尾の 0.3 は 透明度 30%（70%透けている状態）。 */
+      transition: all 0.2s ease;
+    }
+
+    button:hover {
+      background: #8fbcbb;
+      transform: translateY(-2px); /* 上方向に2ピクセルだけフワッと持ち上げる */
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hud">
+    <div class="title">Wild Mouse Chase</div>
+    <div class="score-display" id="score">0</div>
+    <div id="message">クリックでねずみをつかまえて！</div>
+  </div>
+
+  <!-- 画面全域のタップ用フィールド -->
+  <div id="field" onclick="missClick(event)">
+    <div id="mouse" onclick="catchMouse(event)">🐭</div>
+  </div>
+
+  <div class="controls">
+    <button onclick="startGame()">START CHASE</button>
+  </div>
+
+  <script>
+    let score = 0;
+    let isPlaying = false;
+    let moveTimer = null;
+
+    const mouseElement = document.getElementById("mouse");
+    const scoreElement = document.getElementById("score");
+    const messageElement = document.getElementById("message");
+
+
+    function startGame() {
+      score = 0;
+      isPlaying = true;
+      scoreElement.textContent = score;
+      messageElement.textContent = "つかまえられるかな？";
+
+      mouseElement.style.display = "flex";
+    //   display: noneで隠していたねずみを画面に出す（中央揃えの flex モードで復活）
+      mouseElement.textContent = "🐭";
+
+      if (moveTimer) clearInterval(moveTimer);
+    //   clearInterval(...) は「動いている定期タイマーをストップして消去する」命令
+
+      jumpMouse();
+      // 0.8秒ごとに画面の別の場所へ跳ぶ
+      moveTimer = setInterval(jumpMouse, 800);
+    //   setInterval は「指定した時間ごとに、指定した関数を永遠に繰り返す」というメトロノーム機能
+    // 800 はミリ秒単位（1000ミリ秒 ＝ 1秒なので、0.8秒ごと）
+    // 「0.8秒ごとに jumpMouse（ワープ関数）を自動で呼び出し続けなさい」というタイマーを起動し、そのタイマーの管理番号を moveTimer に預けている
+    }
+
+
+    // ネズミを画面のランダムな位置にワープさせる
+    function jumpMouse() {
+      // 画面の端からはみ出さないよう、画面幅・高さからネズミのサイズ（80px）を引いた範囲で計算
+      const maxX = window.innerWidth - 80;
+      const maxY = window.innerHeight - 80;
+
+      // 上部のHUD（スコア表示）と被らないよう、上から120px以上空ける
+      const randomX = Math.floor(Math.random() * maxX);
+      const randomY = Math.floor(Math.random() * (maxY - 120)) + 120;
+
+      mouseElement.style.left = randomX + "px";
+      mouseElement.style.top = randomY + "px";
+    }
+
+
+    // ネズミをクリックしたとき
+    function catchMouse(event) {
+      // 親要素（#field）のクリック判定が重なって動かないように防ぐ呪文
+      event.stopPropagation();
+        //  「イベントの伝播を止める」命令、床側に伝えない
+
+      // 条件分岐1: ゲーム中かどうか？
+      if (isPlaying) {
+        score = score + 10;
+        scoreElement.textContent = score;
+        messageElement.textContent = "捕まえた！ (+10)";
+        
+        mouseElement.textContent = "💨"; // 捕獲エフェクト
+
+        // すぐに別の場所へ逃げる
+        setTimeout(() => {
+          mouseElement.textContent = "🐭";
+          jumpMouse();
+        }, 150); // 0.15秒だけ『💨』の姿で余韻を残して、そのあと元の🐭に戻してワープさせるタイマー
+        // もしこの setTimeout がないとどうなるかというと：
+        // ネズミを叩いた瞬間に「💨」にする
+        // でも、その0.0001秒後にすぐネズミに戻してワープさせてしまう
+        // 結果、人間の目には「💨」が一瞬たりとも見えず、ただ🐭が消えたようにしか見えない
+      }
+    }
+
+    // ネズミ以外の空っぽの背景をクリックしてしまったとき
+    function missClick(event) {
+      // 条件分岐2: ゲーム中に空振りしたかどうか？
+      if (isPlaying) {
+        messageElement.textContent = "逃げられちゃったよ！";
+      } else {
+        messageElement.textContent = "START CHASEを押してね";
+      }
+    }
+  </script>
+
+</body>
+</html>
